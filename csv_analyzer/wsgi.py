@@ -4,7 +4,7 @@ import sys
 from django.core.wsgi import get_wsgi_application
 
 # Add your project directory to the sys.path
-path = '/home/darshil01/mysite'
+path = '/home/darshil011/mysite'
 if path not in sys.path:
     sys.path.insert(0, path)
 
