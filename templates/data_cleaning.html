@@ -1,0 +1,521 @@
+{% extends 'base.html' %}
+
+{% block title %}Data Cleaning - CSV Data Analyzer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="fas fa-broom me-2"></i>Data Cleaning Options</h4>
+                <span class="badge bg-primary">{{ csv_file.name }}</span>
+            </div>
+            <div class="card-body">
+                <form method="post" id="cleaning-form">
+                    {% csrf_token %}
+                    
+                    <div class="mb-4">
+                        <h5>Choose Cleaning Method:</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card cleaning-option" data-method="auto">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-magic fa-3x text-primary mb-3"></i>
+                                        <h5>Enhanced Automatic Cleaning</h5>
+                                        <p class="text-muted">Advanced system with smart format detection:</p>
+                                        <ul class="text-start small">
+                                            <li><strong>Smart Format Detection:</strong> Handles $1000, 1.5K, 2M, etc.</li>
+                                            <li><strong>Currency Support:</strong> Multiple currencies (€, £, ¥, ₹, etc.)</li>
+                                            <li><strong>Numeric Extraction:</strong> Extracts numbers from formatted text</li>
+                                            <li><strong>Safe Statistics:</strong> Mean/median only on actual numbers</li>
+                                            <li><strong>Auto Type Detection:</strong> 85% accuracy threshold</li>
+                                        </ul>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="cleaning_method" 
+                                                   value="auto" id="auto-clean" checked>
+                                            <label class="form-check-label" for="auto-clean">
+                                                Use Enhanced Automatic Cleaning
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card cleaning-option" data-method="manual">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-cogs fa-3x text-success mb-3"></i>
+                                        <h5>Manual Cleaning</h5>
+                                        <p class="text-muted">Full control with enhanced options:</p>
+                                        <ul class="text-start small">
+                                            <li><strong>Format Preview:</strong> See conversion examples</li>
+                                            <li><strong>Smart Conversion:</strong> Extract numbers from any format</li>
+                                            <li><strong>Numeric Statistics:</strong> Mean/median on numbers only</li>
+                                            <li><strong>Format Detection:</strong> Shows detected data formats</li>
+                                            <li><strong>Custom Control:</strong> Override all automatic decisions</li>
+                                        </ul>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="cleaning_method" 
+                                                   value="manual" id="manual-clean">
+                                            <label class="form-check-label" for="manual-clean">
+                                                Use Manual Cleaning
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="manual-options" style="display: none;">
+                        <h5>Manual Cleaning Options:</h5>
+                        <div class="row">
+                            {% for column, info in column_info.items %}
+                            <div class="col-lg-6 mb-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">
+                                            <strong>{{ column }}</strong>
+                                            <span class="badge bg-info ms-2">{{ info.stats.dtype }}</span>
+                                            {% if info.stats.null_count > 0 %}
+                                                <span class="badge bg-warning ms-1">{{ info.stats.null_count }} nulls</span>
+                                            {% else %}
+                                                <span class="badge bg-success ms-1">Clean</span>
+                                            {% endif %}
+                                        </h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <!-- Enhanced Type Detection Info -->
+                                        {% if info.type_detection.can_convert %}
+                                        <div class="mb-3">
+                                            <div class="alert alert-info py-2">
+                                                <small>
+                                                    <i class="fas fa-magic me-1"></i>
+                                                    <strong>Smart Detection:</strong> Can convert to 
+                                                    <strong>{{ info.type_detection.suggested_type }}</strong>
+                                                    ({{ info.type_detection.conversion_percentage }}% convertible)
+                                                    {% if info.type_detection.most_common_format %}
+                                                        <br><strong>Format:</strong> {{ info.type_detection.most_common_format|title }}
+                                                    {% endif %}
+                                                </small>
+                                                
+                                                <!-- Show conversion examples -->
+                                                {% if info.type_detection.conversion_info.conversion_examples %}
+                                                <div class="mt-2">
+                                                    <small><strong>Examples:</strong></small>
+                                                    <div class="conversion-examples">
+                                                        {% for example in info.type_detection.conversion_info.conversion_examples|slice:":3" %}
+                                                            <small class="d-block text-muted">
+                                                                "{{ example.original }}" → {{ example.converted }}
+                                                            </small>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                                
+                                                <!-- Show format breakdown -->
+                                                {% if info.type_detection.format_types %}
+                                                <div class="mt-2">
+                                                    <small><strong>Detected formats:</strong></small>
+                                                    <div class="format-breakdown">
+                                                        {% for format_type, count in info.type_detection.format_types.items %}
+                                                            {% if count > 0 %}
+                                                                <span class="badge bg-light text-dark me-1">{{ format_type }}: {{ count }}</span>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+
+                                        <!-- Enhanced Column Statistics -->
+                                        <div class="mb-3">
+                                            <small class="text-muted">
+                                                <strong>Basic Stats:</strong> {{ info.stats.count }} total, {{ info.stats.unique_count }} unique, {{ info.stats.null_count }} nulls ({{ info.stats.null_percentage }}%)
+                                                
+                                                {% if info.stats.mean %}
+                                                    <br><strong>Numeric:</strong> Mean: {{ info.stats.mean }}, Median: {{ info.stats.median }}
+                                                {% endif %}
+                                                
+                                                {% if info.stats.numeric_mean %}
+                                                    <br><strong>Extracted Numbers:</strong> {{ info.stats.numeric_count }} values, Mean: {{ info.stats.numeric_mean }}, Median: {{ info.stats.numeric_median }}
+                                                {% endif %}
+                                                
+                                                {% if info.stats.mode %}
+                                                    <br><strong>Most Common:</strong> {{ info.stats.mode }}
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        
+                                        <!-- Sample Values -->
+                                        <div class="mb-3">
+                                            <small class="text-muted">
+                                                <strong>Sample:</strong> 
+                                                {% for value in info.sample_values|slice:":3" %}
+                                                    "{{ value }}"{% if not forloop.last %}, {% endif %}
+                                                {% endfor %}
+                                            </small>
+                                        </div>
+
+                                        <!-- 1. Column Action -->
+                                        <div class="mb-3">
+                                            <label class="form-label small"><strong>1. Column Action:</strong></label>
+                                            <select name="column_action_{{ column }}" class="form-select form-select-sm column-action-select" 
+                                                    data-column="{{ column }}">
+                                                {% for option in info.cleaning_options.column_actions %}
+                                                    <option value="{{ option.value }}" 
+                                                            {% if option.recommended %}data-recommended="true"{% endif %}>
+                                                        {{ option.label }}
+                                                        {% if option.recommended %} ⭐{% endif %}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+
+                                        <!-- 2. Data Type Conversion -->
+                                        <div class="mb-3 type-conversion-section">
+                                            <label class="form-label small"><strong>2. Data Type Conversion:</strong></label>
+                                            <select name="type_conversion_{{ column }}" class="form-select form-select-sm type-conversion-select" 
+                                                    data-column="{{ column }}">
+                                                {% for option in info.cleaning_options.type_conversion_options %}
+                                                    <option value="{{ option.value }}" 
+                                                            {% if option.recommended %}data-recommended="true"{% endif %}
+                                                            data-description="{{ option.label }}">
+                                                        {{ option.label }}
+                                                        {% if option.recommended %} ⭐{% endif %}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                            
+                                            <!-- Conversion warning for low success rates -->
+                                            <div class="conversion-warning" style="display: none;">
+                                                <small class="text-warning">
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                                    Some values may not convert successfully. Non-convertible values will become null.
+                                                </small>
+                                            </div>
+                                        </div>
+
+                                        <!-- 3. Missing Value Handling -->
+                                        <div class="mb-3 missing-value-section">
+                                            <label class="form-label small"><strong>3. Missing Value Handling:</strong></label>
+                                            <select name="missing_value_{{ column }}" class="form-select form-select-sm missing-value-select" 
+                                                    data-column="{{ column }}">
+                                                {% for option in info.cleaning_options.missing_value_options %}
+                                                    <option value="{{ option.value }}" 
+                                                            {% if option.recommended %}data-recommended="true"{% endif %}>
+                                                        {{ option.label }}
+                                                        {% if option.recommended %} ⭐{% endif %}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        
+                                        <!-- Custom Value Input -->
+                                        <div class="custom-value-container" style="display: none;">
+                                            <label class="form-label small">Custom Value:</label>
+                                            <input type="text" name="custom_value_{{ column }}" 
+                                                   class="form-control form-control-sm custom-value-input" 
+                                                   placeholder="Enter custom value">
+                                            <small class="text-muted">
+                                                {% if info.stats.dtype == 'int64' or info.stats.dtype == 'float64' %}
+                                                    Enter a numeric value (supports formats like $100, 1.5K, etc.)
+                                                {% elif info.stats.dtype == 'bool' %}
+                                                    Enter: true, false, 1, or 0
+                                                {% else %}
+                                                    Enter any text value or number format
+                                                {% endif %}
+                                            </small>
+                                        </div>
+
+                                        <!-- Enhanced Preview Section -->
+                                        <div class="cleaning-preview" style="display: none;">
+                                            <div class="alert alert-light py-2 mt-2">
+                                                <small>
+                                                    <i class="fas fa-eye me-1"></i>
+                                                    <strong>Preview:</strong> <span class="preview-text"></span>
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'column_selection' csv_file.id %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Column Selection
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-arrow-right me-2"></i>Continue to Analysis
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Handle cleaning method selection
+document.querySelectorAll('input[name="cleaning_method"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const manualOptions = document.getElementById('manual-options');
+        if (this.value === 'manual') {
+            manualOptions.style.display = 'block';
+        } else {
+            manualOptions.style.display = 'none';
+        }
+        
+        // Update card styling
+        document.querySelectorAll('.cleaning-option').forEach(card => {
+            card.classList.remove('border-primary');
+        });
+        document.querySelector(`[data-method="${this.value}"]`).classList.add('border-primary');
+    });
+});
+
+// Handle column action changes
+document.querySelectorAll('.column-action-select').forEach(select => {
+    select.addEventListener('change', function() {
+        const column = this.dataset.column;
+        const cardBody = this.closest('.card-body');
+        const typeSection = cardBody.querySelector('.type-conversion-section');
+        const missingSection = cardBody.querySelector('.missing-value-section');
+        
+        if (this.value === 'remove_column') {
+            typeSection.style.display = 'none';
+            missingSection.style.display = 'none';
+            updatePreview(column, 'Column will be removed from the dataset');
+        } else {
+            typeSection.style.display = 'block';
+            missingSection.style.display = 'block';
+            updatePreview(column, '');
+        }
+    });
+});
+
+// Handle missing value selection
+document.querySelectorAll('.missing-value-select').forEach(select => {
+    select.addEventListener('change', function() {
+        const column = this.dataset.column;
+        const cardBody = this.closest('.card-body');
+        const customContainer = cardBody.querySelector('.custom-value-container');
+        const customInput = cardBody.querySelector('.custom-value-input');
+        
+        if (this.value === 'fill_custom') {
+            customContainer.style.display = 'block';
+            customInput.required = true;
+        } else {
+            customContainer.style.display = 'none';
+            customInput.required = false;
+        }
+        
+        updateColumnPreview(column);
+    });
+});
+
+// Handle type conversion selection with enhanced warnings
+document.querySelectorAll('.type-conversion-select').forEach(select => {
+    select.addEventListener('change', function() {
+        const column = this.dataset.column;
+        const cardBody = this.closest('.card-body');
+        const warningDiv = cardBody.querySelector('.conversion-warning');
+        
+        // Show warning for forced conversions
+        if (this.value.includes('convert_to_') && !this.value.includes('recommended')) {
+            const description = this.options[this.selectedIndex].dataset.description || '';
+            if (description.includes('Force') || description.includes('extracts numbers')) {
+                warningDiv.style.display = 'block';
+            } else {
+                warningDiv.style.display = 'none';
+            }
+        } else {
+            warningDiv.style.display = 'none';
+        }
+        
+        updateColumnPreview(column);
+    });
+});
+
+// Enhanced preview update function
+function updateColumnPreview(column) {
+    const cardBody = document.querySelector(`[data-column="${column}"]`).closest('.card-body');
+    const columnAction = cardBody.querySelector('.column-action-select').value;
+    const typeConversion = cardBody.querySelector('.type-conversion-select').value;
+    const missingValue = cardBody.querySelector('.missing-value-select').value;
+    
+    if (columnAction === 'remove_column') {
+        updatePreview(column, 'Column will be removed from the dataset');
+        return;
+    }
+    
+    let previewText = '';
+    
+    // Type conversion preview with enhanced descriptions
+    if (typeConversion !== 'keep_type') {
+        const targetType = typeConversion.replace('convert_to_', '');
+        const typeSelect = cardBody.querySelector('.type-conversion-select');
+        const selectedOption = typeSelect.options[typeSelect.selectedIndex];
+        const description = selectedOption.dataset.description || '';
+        
+        if (description.includes('extracts numbers')) {
+            previewText += `Smart convert to ${targetType} (extracts from $100, 1.5K, etc.)`;
+        } else if (description.includes('format detected')) {
+            previewText += `Auto-convert to ${targetType} (format detected)`;
+        } else {
+            previewText += `Convert to ${targetType}`;
+        }
+    }
+    
+    // Missing value preview with enhanced descriptions
+    if (missingValue !== 'keep') {
+        if (previewText) previewText += ' + ';
+        
+        if (missingValue === 'fill_mean') {
+            if (missingValue.includes('numeric values')) {
+                previewText += 'Fill nulls with mean of extracted numbers';
+            } else {
+                previewText += 'Fill nulls with mean';
+            }
+        } else if (missingValue === 'fill_median') {
+            if (missingValue.includes('numeric values')) {
+                previewText += 'Fill nulls with median of extracted numbers';
+            } else {
+                previewText += 'Fill nulls with median';
+            }
+        } else if (missingValue === 'fill_mode') {
+            if (missingValue.includes('numeric values')) {
+                previewText += 'Fill nulls with mode of extracted numbers';
+            } else if (missingValue.includes('most common')) {
+                previewText += 'Fill nulls with most common value';
+            } else {
+                previewText += 'Fill nulls with mode';
+            }
+        } else if (missingValue === 'fill_zero') previewText += 'Fill nulls with zero';
+        else if (missingValue === 'fill_unknown') previewText += 'Fill nulls with "Unknown"';
+        else if (missingValue === 'fill_custom') previewText += 'Fill nulls with custom value';
+        else if (missingValue === 'drop_nulls') previewText += 'Remove rows with nulls';
+    }
+    
+    if (!previewText) {
+        previewText = 'No changes will be made to this column';
+    }
+    
+    updatePreview(column, previewText);
+}
+
+function updatePreview(column, text) {
+    const cardBody = document.querySelector(`[data-column="${column}"]`).closest('.card-body');
+    const previewContainer = cardBody.querySelector('.cleaning-preview');
+    const previewText = cardBody.querySelector('.preview-text');
+    
+    if (text) {
+        previewText.textContent = text;
+        previewContainer.style.display = 'block';
+    } else {
+        previewContainer.style.display = 'none';
+    }
+}
+
+// Initialize defaults and previews
+document.querySelectorAll('.column-action-select, .type-conversion-select, .missing-value-select').forEach(select => {
+    // Set default to first recommended option
+    const recommendedOption = select.querySelector('option[data-recommended="true"]');
+    if (recommendedOption) {
+        select.value = recommendedOption.value;
+    }
+    
+    // Trigger change event to initialize preview
+    select.dispatchEvent(new Event('change'));
+});
+
+// Initialize card styling
+document.querySelector('[data-method="auto"]').classList.add('border-primary');
+
+// Enhanced form validation
+document.getElementById('cleaning-form').addEventListener('submit', function(e) {
+    const manualMethod = document.getElementById('manual-clean').checked;
+    
+    if (manualMethod) {
+        // Check if custom values are provided where needed
+        const customInputs = document.querySelectorAll('.custom-value-input');
+        let hasError = false;
+        
+        customInputs.forEach(input => {
+            if (input.required && !input.value.trim()) {
+                hasError = true;
+                input.classList.add('is-invalid');
+                
+                // Add error message if not exists
+                if (!input.nextElementSibling || !input.nextElementSibling.classList.contains('invalid-feedback')) {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'invalid-feedback';
+                    errorDiv.textContent = 'Please provide a custom value';
+                    input.parentNode.appendChild(errorDiv);
+                }
+            } else {
+                input.classList.remove('is-invalid');
+                const errorDiv = input.parentNode.querySelector('.invalid-feedback');
+                if (errorDiv) errorDiv.remove();
+            }
+        });
+        
+        if (hasError) {
+            e.preventDefault();
+            alert('Please provide custom values where required.');
+            return;
+        }
+        
+        // Show enhanced confirmation for significant changes
+        const typeConversions = [];
+        const columnRemovals = [];
+        const smartConversions = [];
+        
+        document.querySelectorAll('.type-conversion-select').forEach(select => {
+            if (select.value !== 'keep_type') {
+                const column = select.dataset.column;
+                const description = select.options[select.selectedIndex].dataset.description || '';
+                
+                if (description.includes('extracts numbers') || description.includes('format detected')) {
+                    smartConversions.push(column);
+                } else {
+                    typeConversions.push(column);
+                }
+            }
+        });
+        
+        document.querySelectorAll('.column-action-select').forEach(select => {
+            if (select.value === 'remove_column') {
+                const column = select.dataset.column;
+                columnRemovals.push(column);
+            }
+        });
+        
+        let confirmMessage = '';
+        if (columnRemovals.length > 0) {
+            confirmMessage += `Columns to be removed: ${columnRemovals.join(', ')}\n`;
+        }
+        if (smartConversions.length > 0) {
+            confirmMessage += `Smart numeric conversions: ${smartConversions.join(', ')}\n`;
+        }
+        if (typeConversions.length > 0) {
+            confirmMessage += `Other type conversions: ${typeConversions.join(', ')}\n`;
+        }
+        
+        if (confirmMessage) {
+            confirmMessage += '\nThese changes cannot be undone. Continue?';
+            if (!confirm(confirmMessage)) {
+                e.preventDefault();
+                return;
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

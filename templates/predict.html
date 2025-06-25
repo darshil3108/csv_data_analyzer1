@@ -1,0 +1,858 @@
+{% extends 'base.html' %}
+
+{% block title %}Machine Learning Prediction - CSV Data Analyzer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="fas fa-brain me-2"></i>Machine Learning Prediction</h4>
+                <span class="badge bg-primary">{{ csv_file.name }}</span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <!-- Step 1: Select Features and Target -->
+                        <div class="card mb-4" id="feature-selection-card">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-list-check me-2"></i>Step 1: Select Features and Target Variable
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="feature-selection-form">
+                                    {% csrf_token %}
+                                    
+                                    <!-- Target Variable Selection -->
+                                    <div class="mb-4">
+                                        <label class="form-label">
+                                            <strong>Select Target Variable (Y Column):</strong>
+                                        </label>
+                                        <select name="y_column" id="y-column" class="form-select" required>
+                                            <option value="">Choose the variable you want to predict</option>
+                                            {% for col in all_columns %}
+                                                <option value="{{ col }}">
+                                                    {{ col }}
+                                                    {% if col in numeric_columns %}
+                                                        <span class="text-muted">(Numeric)</span>
+                                                    {% else %}
+                                                        <span class="text-muted">(Categorical)</span>
+                                                    {% endif %}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="form-text">This is the variable you want to predict (dependent variable).</div>
+                                    </div>
+                                    
+                                    <!-- Feature Variables Selection -->
+                                    <div class="mb-4">
+                                        <label class="form-label">
+                                            <strong>Select Feature Variables (X Columns):</strong>
+                                        </label>
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <small class="text-muted">Select one or more variables to use for prediction</small>
+                                            <div>
+                                                <button type="button" class="btn btn-outline-primary btn-sm" id="select-all-features">
+                                                    Select All
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-features">
+                                                    Clear All
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="card">
+                                            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                                                <div class="row">
+                                                    {% for col in all_columns %}
+                                                    <div class="col-md-6 mb-2">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input x-column-checkbox" 
+                                                                   type="checkbox" 
+                                                                   name="x_columns" 
+                                                                   value="{{ col }}" 
+                                                                   id="x_col_{{ forloop.counter }}">
+                                                            <label class="form-check-label" for="x_col_{{ forloop.counter }}">
+                                                                <strong>{{ col }}</strong>
+                                                                {% if col in numeric_columns %}
+                                                                    <span class="badge bg-info ms-1">Numeric</span>
+                                                                {% else %}
+                                                                    <span class="badge bg-secondary ms-1">Categorical</span>
+                                                                {% endif %}
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="form-text">These variables will be used to make predictions (independent variables).</div>
+                                    </div>
+                                    
+                                    <!-- Algorithm Selection -->
+                                    <div class="mb-4">
+                                        <label class="form-label">
+                                            <strong>Select Machine Learning Algorithm:</strong>
+                                        </label>
+                                        <select name="algorithm" id="algorithm" class="form-select" required>
+                                            <option value="">Choose an algorithm</option>
+                                            <optgroup label="🔢 Regression Algorithms (for numeric targets)">
+                                                <option value="linear_regression">Linear Regression</option>
+                                                <option value="ridge">Ridge Regression</option>
+                                                <option value="lasso">Lasso Regression</option>
+                                                <option value="polynomial">Polynomial Regression</option>
+                                                <option value="svr">Support Vector Regression (SVR)</option>
+                                                <option value="decision_tree_regressor">Decision Tree Regressor</option>
+                                                <option value="random_forest_regressor">Random Forest Regressor</option>
+                                                <option value="gradient_boosting_regressor">Gradient Boosting Regressor</option>
+                                                <option value="xgboost_regressor">XGBoost Regressor</option>
+                                            </optgroup>
+                                            <optgroup label="🏷️ Classification Algorithms (for categorical targets)">
+                                                <option value="logistic_regression">Logistic Regression</option>
+                                                <option value="svc">Support Vector Classification (SVC)</option>
+                                                <option value="decision_tree_classifier">Decision Tree Classifier</option>
+                                                <option value="random_forest_classifier">Random Forest Classifier</option>
+                                                <option value="knn">K-Nearest Neighbors (KNN)</option>
+                                                <option value="gradient_boosting_classifier">Gradient Boosting Classifier</option>
+                                                <option value="ada_boost_classifier">AdaBoost Classifier</option>
+                                                <option value="xgboost_classifier">XGBoost Classifier</option>
+                                            </optgroup>
+                                        </select>
+                                        <div class="form-text">Choose based on your target variable type and problem complexity.</div>
+                                    </div>
+                                    
+                                    <!-- Training Data Size -->
+                                    <div class="mb-4">
+                                        <label class="form-label">
+                                            <strong>Training Data Split:</strong>
+                                        </label>
+                                        <select name="test_size" id="test-size" class="form-select">
+                                            <option value="0.2">80% Training / 20% Testing (Recommended)</option>
+                                            <option value="0.3">70% Training / 30% Testing</option>
+                                            <option value="0.25">75% Training / 25% Testing</option>
+                                            <option value="0.15">85% Training / 15% Testing</option>
+                                        </select>
+                                        <div class="form-text">How to split your data for training and evaluation.</div>
+                                    </div>
+                                    
+                                    <div class="d-grid">
+                                        <button type="submit" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-cogs me-2"></i>Train Model
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 2: Model Results -->
+                        <div class="card mb-4" id="model-results-card" style="display: none;">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-chart-line me-2"></i>Step 2: Model Training Results
+                                </h5>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetModel()">
+                                    <i class="fas fa-redo me-1"></i>Train New Model
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="model-info-section">
+                                    <!-- Model info will be inserted here -->
+                                </div>
+                                
+                                <div class="row mt-4">
+                                    <div class="col-md-6">
+                                        <div class="card bg-light">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">📊 Model Performance Metrics</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div id="performance-metrics">
+                                                    <!-- Metrics will be inserted here -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card bg-light">
+                                            <div class="card-header">
+                                                <h6 class="mb-0">ℹ️ Training Information</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <div id="training-info">
+                                                    <!-- Training info will be inserted here -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 3: Make Predictions -->
+                        <div class="card mb-4" id="prediction-card" style="display: none;">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-calculator me-2"></i>Step 3: Make Predictions
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="prediction-form">
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <div id="prediction-inputs">
+                                                <!-- Input fields will be generated here -->
+                                            </div>
+                                            <div class="d-grid">
+                                                <button type="submit" class="btn btn-success btn-lg">
+                                                    <i class="fas fa-magic me-2"></i>Get Prediction
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="card bg-primary text-white" id="prediction-result" style="display: none;">
+                                                <div class="card-header">
+                                                    <h6 class="mb-0">🎯 Predicted Value</h6>
+                                                </div>
+                                                <div class="card-body text-center">
+                                                    <div class="h2 mb-0" id="prediction-value">
+                                                        <!-- Prediction result will be shown here -->
+                                                    </div>
+                                                    <small id="prediction-confidence" class="opacity-75">
+                                                        <!-- Confidence info if available -->
+                                                    </small>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="mt-3">
+                                                <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="clearPredictionInputs()">
+                                                    <i class="fas fa-eraser me-1"></i>Clear Inputs
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Sidebar with Help -->
+                    <div class="col-lg-4">
+                        <div class="card bg-light">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-question-circle me-2"></i>How to Use</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="step-guide">
+                                    <div class="step-item">
+                                        <div class="step-number">1</div>
+                                        <div class="step-content">
+                                            <strong>Select Variables</strong>
+                                            <p class="small mb-0">Choose your target variable (what you want to predict) and feature variables (what you'll use to make predictions).</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="step-item">
+                                        <div class="step-number">2</div>
+                                        <div class="step-content">
+                                            <strong>Choose Algorithm</strong>
+                                            <p class="small mb-0">Select a machine learning algorithm. Use regression for numeric targets, classification for categorical targets.</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="step-item">
+                                        <div class="step-number">3</div>
+                                        <div class="step-content">
+                                            <strong>Train Model</strong>
+                                            <p class="small mb-0">Click "Train Model" to build your prediction model and see its performance metrics.</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="step-item">
+                                        <div class="step-number">4</div>
+                                        <div class="step-content">
+                                            <strong>Make Predictions</strong>
+                                            <p class="small mb-0">Enter values for your feature variables to get predictions from your trained model.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Algorithm Guide</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="algorithm-guide">
+                                    <div class="mb-3">
+                                        <strong>🔢 Regression (Numeric Targets):</strong>
+                                        <ul class="small mt-1">
+                                            <li><strong>Linear:</strong> Simple, fast, interpretable</li>
+                                            <li><strong>Random Forest:</strong> Good for complex patterns</li>
+                                            <li><strong>XGBoost:</strong> Often highest accuracy</li>
+                                        </ul>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <strong>🏷️ Classification (Categorical Targets):</strong>
+                                        <ul class="small mt-1">
+                                            <li><strong>Logistic:</strong> Simple, interpretable</li>
+                                            <li><strong>Random Forest:</strong> Robust, handles mixed data</li>
+                                            <li><strong>SVC:</strong> Good for complex boundaries</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Data Info</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="small">
+                                    <div class="mb-2">
+                                        <strong>Total Columns:</strong> {{ all_columns|length }}
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Numeric Columns:</strong> {{ numeric_columns|length }}
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Categorical Columns:</strong> {{ categorical_columns|length }}
+                                    </div>
+                                    <div class="mb-0">
+                                        <strong>Dataset:</strong> {{ csv_file.name }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Modal -->
+<div class="modal fade" id="loadingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h5 id="loading-message">Training your model...</h5>
+                <p class="text-muted mb-0">This may take a few moments depending on your data size and algorithm complexity.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csvId = {{ csv_file.id }};
+let currentModelId = null;
+
+// Feature selection handlers
+document.getElementById('select-all-features').addEventListener('click', function() {
+    document.querySelectorAll('.x-column-checkbox').forEach(cb => cb.checked = true);
+    updateFeatureCount();
+});
+
+document.getElementById('clear-features').addEventListener('click', function() {
+    document.querySelectorAll('.x-column-checkbox').forEach(cb => cb.checked = false);
+    updateFeatureCount();
+});
+
+// Update feature count
+function updateFeatureCount() {
+    const checkedCount = document.querySelectorAll('.x-column-checkbox:checked').length;
+    const totalCount = document.querySelectorAll('.x-column-checkbox').length;
+    
+    // You can add a counter display here if needed
+}
+
+// Prevent selecting target as feature
+document.getElementById('y-column').addEventListener('change', function() {
+    const targetColumn = this.value;
+    document.querySelectorAll('.x-column-checkbox').forEach(cb => {
+        if (cb.value === targetColumn) {
+            cb.checked = false;
+            cb.disabled = true;
+        } else {
+            cb.disabled = false;
+        }
+    });
+});
+
+// Feature selection form submission
+document.getElementById('feature-selection-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const yColumn = document.getElementById('y-column').value;
+    const algorithm = document.getElementById('algorithm').value;
+    const testSize = document.getElementById('test-size').value;
+    const xColumns = Array.from(document.querySelectorAll('.x-column-checkbox:checked')).map(cb => cb.value);
+    
+    // Validation
+    if (!yColumn) {
+        showAlert('Please select a target variable (Y column).', 'warning');
+        return;
+    }
+    
+    if (xColumns.length === 0) {
+        showAlert('Please select at least one feature variable (X column).', 'warning');
+        return;
+    }
+    
+    if (!algorithm) {
+        showAlert('Please select a machine learning algorithm.', 'warning');
+        return;
+    }
+    
+    // Check if target is in features
+    if (xColumns.includes(yColumn)) {
+        showAlert('The target variable cannot also be a feature variable.', 'warning');
+        return;
+    }
+    
+    // Show loading modal
+    const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    loadingModal.show();
+    
+    // Prepare form data
+    const formData = new FormData();
+    formData.append('y_column', yColumn);
+    formData.append('algorithm', algorithm);
+    formData.append('test_size', testSize);
+    xColumns.forEach(col => formData.append('x_columns', col));
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    // Send training request
+    fetch(`/train-model/${csvId}/`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        loadingModal.hide();
+        
+        if (data.success) {
+            currentModelId = data.model_id;
+            displayModelResults(data);
+            showPredictionForm(data.x_columns);
+            
+            // Scroll to results
+            document.getElementById('model-results-card').scrollIntoView({ 
+                behavior: 'smooth',
+                block: 'start'
+            });
+        } else {
+            showAlert(data.error || 'Error training model. Please try again.', 'danger');
+        }
+    })
+    .catch(error => {
+        loadingModal.hide();
+        showAlert('Network error: Unable to train model. Please try again.', 'danger');
+        console.error('Error:', error);
+    });
+});
+
+function displayModelResults(data) {
+    // Show model info
+    const modelInfoHtml = `
+        <div class="alert alert-success">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h5 class="mb-1"><i class="fas fa-check-circle me-2"></i>Model Trained Successfully!</h5>
+                    <p class="mb-1"><strong>Algorithm:</strong> ${data.algorithm_name}</p>
+                    <p class="mb-1"><strong>Target Variable:</strong> ${data.y_column}</p>
+                    <p class="mb-0"><strong>Features:</strong> ${data.x_columns.join(', ')}</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="badge bg-light text-dark fs-6">
+                        Model ID: ${data.model_id}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('model-info-section').innerHTML = modelInfoHtml;
+    
+    // Display performance metrics
+    let metricsHtml = '';
+    
+    if (data.is_classifier) {
+        metricsHtml = `
+            <div class="row g-3">
+                <div class="col-6">
+                    <div class="metric-box">
+                        <div class="metric-value">${(data.metrics.accuracy * 100).toFixed(1)}%</div>
+                        <div class="metric-label">Accuracy</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="metric-box">
+                        <div class="metric-value">${(data.metrics.f1_score * 100).toFixed(1)}%</div>
+                        <div class="metric-label">F1 Score</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="metric-box">
+                        <div class="metric-value">${(data.metrics.precision * 100).toFixed(1)}%</div>
+                        <div class="metric-label">Precision</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="metric-box">
+                        <div class="metric-value">${(data.metrics.recall * 100).toFixed(1)}%</div>
+                        <div class="metric-label">Recall</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        // FIXED: Allow negative R² scores
+        const r2Score = data.metrics.r2_score;
+        const r2Percentage = (r2Score * 100).toFixed(1);
+        
+        // Determine color based on R² score quality
+        let r2Color = 'text-primary';
+        if (r2Score < 0) {
+            r2Color = 'text-danger';
+        } else if (r2Score < 0.5) {
+            r2Color = 'text-warning';
+        } else if (r2Score >= 0.8) {
+            r2Color = 'text-success';
+        }
+        
+        metricsHtml = `
+            <div class="row g-3">
+                <div class="col-12">
+                    <div class="metric-box metric-box-large">
+                        <div class="metric-value ${r2Color}">${r2Percentage}%</div>
+                        <div class="metric-label">R² Score (Model Accuracy)</div>
+                        <div class="metric-interpretation">
+                            ${getR2Interpretation(r2Score)}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="metric-box">
+                        <div class="metric-value">${data.metrics.mae.toFixed(4)}</div>
+                        <div class="metric-label">Mean Absolute Error</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="metric-box">
+                        <div class="metric-value">${data.metrics.rmse.toFixed(4)}</div>
+                        <div class="metric-label">Root Mean Squared Error</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    document.getElementById('performance-metrics').innerHTML = metricsHtml;
+    
+    // Display training info
+    const trainingInfoHtml = `
+        <div class="info-item">
+            <strong>Training Data:</strong> ${data.data_info ? data.data_info.training_rows : 'N/A'} rows
+        </div>
+        <div class="info-item">
+            <strong>Test Split:</strong> ${((parseFloat(document.getElementById('test-size').value) * 100).toFixed(0))}%
+        </div>
+        <div class="info-item">
+            <strong>Features Used:</strong> ${data.x_columns.length}
+        </div>
+        <div class="info-item">
+            <strong>Model Type:</strong> ${data.is_classifier ? 'Classification' : 'Regression'}
+        </div>
+    `;
+    
+    document.getElementById('training-info').innerHTML = trainingInfoHtml;
+    
+    // Show results card
+    document.getElementById('model-results-card').style.display = 'block';
+}
+
+// Function to interpret R² score
+function getR2Interpretation(r2Score) {
+    if (r2Score < 0) {
+        return '<small class="text-danger">Model performs worse than predicting the mean</small>';
+    } else if (r2Score < 0.3) {
+        return '<small class="text-warning">Poor model performance</small>';
+    } else if (r2Score < 0.5) {
+        return '<small class="text-warning">Below average model performance</small>';
+    } else if (r2Score < 0.7) {
+        return '<small class="text-info">Moderate model performance</small>';
+    } else if (r2Score < 0.8) {
+        return '<small class="text-primary">Good model performance</small>';
+    } else if (r2Score < 0.9) {
+        return '<small class="text-success">Very good model performance</small>';
+    } else {
+        return '<small class="text-success">Excellent model performance</small>';
+    }
+}
+
+function showPredictionForm(xColumns) {
+    const inputsContainer = document.getElementById('prediction-inputs');
+    inputsContainer.innerHTML = '';
+    
+    xColumns.forEach((col, index) => {
+        const formGroup = document.createElement('div');
+        formGroup.className = 'mb-3';
+        
+        const label = document.createElement('label');
+        label.className = 'form-label';
+        label.innerHTML = `<strong>${col}</strong>`;
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control';
+        input.name = col;
+        input.required = true;
+        input.placeholder = `Enter value for ${col}`;
+        
+        const helpText = document.createElement('div');
+        helpText.className = 'form-text';
+        helpText.textContent = `Enter the value for ${col} to use in prediction`;
+        
+        formGroup.appendChild(label);
+        formGroup.appendChild(input);
+        formGroup.appendChild(helpText);
+        inputsContainer.appendChild(formGroup);
+    });
+    
+    // Show prediction card
+    document.getElementById('prediction-card').style.display = 'block';
+}
+
+// Prediction form submission
+document.getElementById('prediction-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    if (!currentModelId) {
+        showAlert('No model available. Please train a model first.', 'warning');
+        return;
+    }
+    
+    // Collect input values
+    const inputs = {};
+    const inputElements = this.querySelectorAll('input[type="text"]');
+    let hasEmptyInputs = false;
+    
+    inputElements.forEach(input => {
+        if (!input.value.trim()) {
+            hasEmptyInputs = true;
+            input.classList.add('is-invalid');
+        } else {
+            input.classList.remove('is-invalid');
+            inputs[input.name] = input.value.trim();
+        }
+    });
+    
+    if (hasEmptyInputs) {
+        showAlert('Please fill in all input fields.', 'warning');
+        return;
+    }
+    
+    // Show loading
+    document.getElementById('loading-message').textContent = 'Making prediction...';
+    const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    loadingModal.show();
+    
+    // Send prediction request
+    fetch(`/predict/${currentModelId}/`, {
+        method: 'POST',
+        body: JSON.stringify(inputs),
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        loadingModal.hide();
+        
+        if (data.success) {
+            // Display prediction
+            document.getElementById('prediction-value').textContent = data.prediction;
+            document.getElementById('prediction-result').style.display = 'block';
+            
+            // Scroll to result
+            document.getElementById('prediction-result').scrollIntoView({ 
+                behavior: 'smooth',
+                block: 'center'
+            });
+        } else {
+            showAlert(data.error || 'Error making prediction. Please check your input values.', 'danger');
+        }
+    })
+    .catch(error => {
+        loadingModal.hide();
+        showAlert('Network error: Unable to make prediction. Please try again.', 'danger');
+        console.error('Error:', error);
+    });
+});
+
+// Utility functions
+function resetModel() {
+    currentModelId = null;
+    document.getElementById('model-results-card').style.display = 'none';
+    document.getElementById('prediction-card').style.display = 'none';
+    document.getElementById('prediction-result').style.display = 'none';
+    document.getElementById('feature-selection-form').reset();
+    
+    // Re-enable all checkboxes
+    document.querySelectorAll('.x-column-checkbox').forEach(cb => {
+        cb.disabled = false;
+    });
+    
+    showAlert('Ready to train a new model. Please select your features and algorithm.', 'info');
+}
+
+function clearPredictionInputs() {
+    document.querySelectorAll('#prediction-inputs input').forEach(input => {
+        input.value = '';
+        input.classList.remove('is-invalid');
+    });
+    document.getElementById('prediction-result').style.display = 'none';
+}
+
+function showAlert(message, type) {
+    // Remove existing alerts
+    document.querySelectorAll('.alert-dismissible').forEach(alert => {
+        if (!alert.classList.contains('alert-success') || type !== 'info') {
+            alert.remove();
+        }
+    });
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Insert at the top of the main content
+    const mainContent = document.querySelector('.card-body');
+    mainContent.insertBefore(alertDiv, mainContent.firstChild);
+    
+    // Auto-hide success and info messages
+    if (type === 'success' || type === 'info') {
+        setTimeout(() => {
+            alertDiv.remove();
+        }, 5000);
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default loading message
+    document.getElementById('loading-message').textContent = 'Training your model...';
+});
+</script>
+
+<style>
+.step-guide {
+    padding: 0;
+}
+
+.step-item {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.step-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.step-number {
+    background: #0d6efd;
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    margin-right: 15px;
+    flex-shrink: 0;
+}
+
+.step-content {
+    flex: 1;
+}
+
+.metric-box {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+}
+
+.metric-box-large {
+    padding: 20px;
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #0d6efd;
+    margin-bottom: 5px;
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.metric-interpretation {
+    margin-top: 5px;
+}
+
+.info-item {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.info-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.algorithm-guide ul {
+    margin-bottom: 0;
+    padding-left: 1rem;
+}
+
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.card {
+    transition: all 0.2s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+</style>
+{% endblock %}

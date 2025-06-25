@@ -1,0 +1,717 @@
+{% extends 'base.html' %}
+
+{% block title %}Data Analysis - CSV Data Analyzer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="fas fa-chart-line me-2"></i>Data Analysis & Visualization</h4>
+                <span class="badge bg-primary">{{ csv_file.name }}</span>
+            </div>
+            <div class="card-body">
+                <!-- Chart Generation Form -->
+                <div class="row mb-4">
+                    <div class="col-lg-8">
+                        <form id="chart-form">
+                            {% csrf_token %}
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label class="form-label">Chart Type</label>
+                                    <select name="chart_type" id="chart-type" class="form-select">
+                                        <option value="">Select chart type</option>
+                                        <option value="histogram">Histogram</option>
+                                        <option value="bar">Bar Chart</option>
+                                        <option value="line">Line Chart</option>
+                                        <option value="scatter">Scatter Plot</option>
+                                        <option value="box">Box Plot</option>
+                                        <option value="pie">Pie Chart</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">X-Axis Column</label>
+                                    <select name="x_column" id="x-column" class="form-select">
+                                        <option value="">Select X column</option>
+                                        {% for col in all_columns %}
+                                            <option value="{{ col }}">{{ col }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Y-Axis Column (Optional)</label>
+                                    <select name="y_column" id="y-column" class="form-select">
+                                        <option value="">Select Y column</option>
+                                        {% for col in all_columns %}
+                                            <option value="{{ col }}">{{ col }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <button type="button" class="btn btn-outline-info me-2" id="get-suggestions">
+                                        <i class="fas fa-lightbulb me-1"></i>Get Chart Suggestions
+                                    </button>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-chart-bar me-1"></i>Generate Chart
+                                    </button>
+                                    <!-- New Prediction Button -->
+                                    <button type="button" class="btn btn-success ms-2" id="prediction-btn">
+                                        <i class="fas fa-brain me-1"></i>Quick Prediction
+                                    </button>
+                                    <a href="{% url 'predict_page' csv_file.id %}" class="btn btn-outline-success ms-2">
+                                        <i class="fas fa-cogs me-1"></i>Advanced Prediction
+                                    </a>
+                                </div>
+                            </div>
+                        </form>
+                        
+                        <!-- Chart Suggestions -->
+                        <div id="chart-suggestions" class="mt-3" style="display: none;">
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-lightbulb me-2"></i>Suggested Chart Types:</h6>
+                                <div id="suggestions-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6><i class="fas fa-info-circle me-2"></i>Quick Guide:</h6>
+                                <ul class="small mb-0">
+                                    <li><strong>Histogram:</strong> Distribution of single column</li>
+                                    <li><strong>Bar Chart:</strong> Compare categories</li>
+                                    <li><strong>Line Chart:</strong> Trends over time/sequence or categorical averages</li>
+                                    <li><strong>Scatter Plot:</strong> Relationship between two variables or distribution by category</li>
+                                    <li><strong>Box Plot:</strong> Statistical summary</li>
+                                    <li><strong>Pie Chart:</strong> Parts of a whole</li>
+                                    <li><strong>Prediction:</strong> Train ML models to predict values</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Display Area -->
+                <div id="chart-container" style="display: none;">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fas fa-chart-area me-2"></i>Generated Chart</h5>
+                            <div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="downloadChart()">
+                                    <i class="fas fa-download me-1"></i>Download
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="generateNewChart()">
+                                    <i class="fas fa-plus me-1"></i>New Chart
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body text-center">
+                            <div class="chart-display">
+                                <img id="chart-image" src="/placeholder.svg" alt="Generated Chart" class="img-fluid">
+                            </div>
+                            <div class="mt-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Chart includes legends with statistical information and data insights.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading Indicator -->
+                <div id="loading-indicator" style="display: none;">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Generating chart...</span>
+                        </div>
+                        <p class="mt-2">Generating your chart...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prediction Results Container -->
+        <div id="prediction-results-container" class="card mb-4" style="display: none;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-brain me-2"></i>Prediction Results</h5>
+                <button type="button" class="btn-close" aria-label="Close" onclick="closePredictionResults()"></button>
+            </div>
+            <div class="card-body">
+                <div id="model-info" class="mb-4">
+                    <!-- Model info will be inserted here -->
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Model Performance</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="model-metrics">
+                                    <!-- Metrics will be inserted here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Make Predictions</h6>
+                            </div>
+                            <div class="card-body">
+                                <form id="prediction-input-form">
+                                    <div id="prediction-inputs">
+                                        <!-- Input fields will be inserted here -->
+                                    </div>
+                                    <button type="submit" class="btn btn-primary mt-3">
+                                        <i class="fas fa-calculator me-1"></i>Predict
+                                    </button>
+                                </form>
+                                <div id="prediction-output" class="mt-3" style="display: none;">
+                                    <div class="alert alert-success">
+                                        <h6 class="mb-1">Predicted Value:</h6>
+                                        <div id="prediction-value" class="h4"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Preview -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Data Preview (First 10 rows)</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    {{ data_preview|safe }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Prediction Modal -->
+<div class="modal fade" id="predictionModal" tabindex="-1" aria-labelledby="predictionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="predictionModalLabel">
+                    <i class="fas fa-brain me-2"></i>Machine Learning Prediction
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="prediction-form">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Select Y Column (Target Variable):</label>
+                        <select name="y_column" id="prediction-y-column" class="form-select" required>
+                            <option value="">Select target column</option>
+                            {% for col in numeric_columns %}
+                                <option value="{{ col }}">{{ col }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">This is the variable you want to predict.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Select X Columns (Features):</label>
+                        <div class="card">
+                            <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+                                {% for col in all_columns %}
+                                <div class="form-check">
+                                    <input class="form-check-input x-column-checkbox" type="checkbox" 
+                                           name="x_columns" value="{{ col }}" id="x_col_{{ forloop.counter }}">
+                                    <label class="form-check-label" for="x_col_{{ forloop.counter }}">
+                                        {{ col }}
+                                        {% if col in numeric_columns %}
+                                            <span class="badge bg-info">Numeric</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Categorical</span>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="form-text">These are the variables used to make predictions.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Select Algorithm:</label>
+                        <select name="algorithm" id="prediction-algorithm" class="form-select" required>
+                            <option value="">Select algorithm</option>
+                            <optgroup label="Regression Algorithms">
+                                <option value="linear_regression">Simple/Multiple Linear Regression</option>
+                                <option value="ridge">Ridge Regression</option>
+                                <option value="lasso">Lasso Regression</option>
+                                <option value="polynomial">Polynomial Regression</option>
+                                <option value="svr">Support Vector Regression (SVR)</option>
+                                <option value="decision_tree_regressor">Decision Tree Regressor</option>
+                                <option value="random_forest_regressor">Random Forest Regressor</option>
+                                <option value="gradient_boosting_regressor">Gradient Boosting Regressor</option>
+                            </optgroup>
+                            <optgroup label="Classification Algorithms">
+                                <option value="logistic_regression">Logistic Regression</option>
+                                <option value="svc">Support Vector Classification (SVC)</option>
+                                <option value="decision_tree_classifier">Decision Tree Classifier</option>
+                                <option value="random_forest_classifier">Random Forest Classifier</option>
+                                <option value="knn">K-Nearest Neighbors (KNN)</option>
+                                <option value="gradient_boosting_classifier">Gradient Boosting Classifier</option>
+                                <option value="ada_boost_classifier">AdaBoost Classifier</option>
+                                <option value="xgboost_classifier">XGBoost Classifier</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="train-model-btn">
+                    <i class="fas fa-cogs me-1"></i>Train Model
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csvId = {{ csv_file.id }};
+
+// Chart form submission
+document.getElementById('chart-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const chartType = formData.get('chart_type');
+    const xColumn = formData.get('x_column');
+    
+    if (!chartType || !xColumn) {
+        showAlert('Please select chart type and X-axis column.', 'warning');
+        return;
+    }
+    
+    // Check if Y column is required for this chart type
+    if ((chartType === 'bar' || chartType === 'line' || chartType === 'scatter') && !formData.get('y_column')) {
+        showAlert(`${chartType.charAt(0).toUpperCase() + chartType.slice(1)} chart requires a Y-axis column.`, 'warning');
+        return;
+    }
+    
+    // Show loading indicator
+    document.getElementById('loading-indicator').style.display = 'block';
+    document.getElementById('chart-container').style.display = 'none';
+    hideAlert();
+    
+    // Send request to generate chart
+    fetch(`/generate-chart/${csvId}/`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loading-indicator').style.display = 'none';
+        
+        if (data.success) {
+            document.getElementById('chart-image').src = 'data:image/png;base64,' + data.image_base64;
+            document.getElementById('chart-container').style.display = 'block';
+            if (data.message) {
+                showAlert(data.message, 'success');
+            }
+        } else {
+            showAlert(data.error || 'Unknown error occurred while generating chart.', 'danger');
+        }
+    })
+    .catch(error => {
+        document.getElementById('loading-indicator').style.display = 'none';
+        showAlert('Network error: Unable to generate chart. Please try again.', 'danger');
+        console.error('Error:', error);
+    });
+});
+
+// Get chart suggestions
+document.getElementById('get-suggestions').addEventListener('click', function() {
+    const xColumn = document.getElementById('x-column').value;
+    const yColumn = document.getElementById('y-column').value;
+    
+    if (!xColumn) {
+        showAlert('Please select X-axis column first.', 'warning');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('x_column', xColumn);
+    if (yColumn) formData.append('y_column', yColumn);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    fetch(`/chart-suggestions/${csvId}/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.suggestions && data.suggestions.length > 0) {
+            const suggestionsList = document.getElementById('suggestions-list');
+            suggestionsList.innerHTML = '';
+            
+            data.suggestions.forEach(suggestion => {
+                const button = document.createElement('button');
+                button.className = 'btn btn-outline-primary btn-sm me-2 mb-1';
+                button.textContent = suggestion.charAt(0).toUpperCase() + suggestion.slice(1);
+                button.onclick = function() {
+                    document.getElementById('chart-type').value = suggestion;
+                    hideAlert();
+                };
+                suggestionsList.appendChild(button);
+            });
+            
+            document.getElementById('chart-suggestions').style.display = 'block';
+        } else {
+            showAlert('No chart suggestions available for the selected columns.', 'info');
+        }
+    })
+    .catch(error => {
+        showAlert('Error getting chart suggestions. Please try again.', 'warning');
+        console.error('Error:', error);
+    });
+});
+
+// Dynamic Y-column requirement based on chart type
+document.getElementById('chart-type').addEventListener('change', function() {
+    const chartType = this.value;
+    const yColumnSelect = document.getElementById('y-column');
+    const yColumnLabel = yColumnSelect.previousElementSibling;
+    
+    if (chartType === 'bar' || chartType === 'line' || chartType === 'scatter') {
+        // These chart types require Y column
+        yColumnLabel.textContent = 'Y-Axis Column (Required)';
+        yColumnSelect.setAttribute('required', 'required');
+    } else {
+        // Other chart types have optional Y column
+        yColumnLabel.textContent = 'Y-Axis Column (Optional)';
+        yColumnSelect.removeAttribute('required');
+    }
+});
+
+// Alert functions
+function showAlert(message, type) {
+    hideAlert(); // Remove existing alerts
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show mt-3`;
+    alertDiv.id = 'chart-alert';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    const chartForm = document.getElementById('chart-form');
+    chartForm.parentNode.insertBefore(alertDiv, chartForm.nextSibling);
+    
+    // Auto-hide success messages after 5 seconds
+    if (type === 'success') {
+        setTimeout(() => {
+            hideAlert();
+        }, 5000);
+    }
+}
+
+function hideAlert() {
+    const existingAlert = document.getElementById('chart-alert');
+    if (existingAlert) {
+        existingAlert.remove();
+    }
+}
+
+function downloadChart() {
+    const chartImage = document.getElementById('chart-image');
+    if (chartImage && chartImage.src && !chartImage.src.includes('placeholder')) {
+        const link = document.createElement('a');
+        link.download = 'chart.png';
+        link.href = chartImage.src;
+        link.click();
+        showAlert('Chart downloaded successfully!', 'success');
+    } else {
+        showAlert('No chart available to download.', 'warning');
+    }
+}
+
+function generateNewChart() {
+    document.getElementById('chart-container').style.display = 'none';
+    document.getElementById('chart-form').reset();
+    hideAlert();
+    showAlert('Ready to generate a new chart. Please select your options above.', 'info');
+    
+    // Reset Y-column label to default
+    const yColumnLabel = document.getElementById('y-column').previousElementSibling;
+    yColumnLabel.textContent = 'Y-Axis Column (Optional)';
+    document.getElementById('y-column').removeAttribute('required');
+}
+
+// Prediction Modal
+document.getElementById('prediction-btn').addEventListener('click', function() {
+    const predictionModal = new bootstrap.Modal(document.getElementById('predictionModal'));
+    predictionModal.show();
+});
+
+// Train Model Button
+document.getElementById('train-model-btn').addEventListener('click', function() {
+    const form = document.getElementById('prediction-form');
+    const yColumn = document.getElementById('prediction-y-column').value;
+    const algorithm = document.getElementById('prediction-algorithm').value;
+    const xColumns = Array.from(document.querySelectorAll('.x-column-checkbox:checked')).map(cb => cb.value);
+    
+    // Validation
+    if (!yColumn) {
+        alert('Please select a target (Y) column.');
+        return;
+    }
+    
+    if (xColumns.length === 0) {
+        alert('Please select at least one feature (X) column.');
+        return;
+    }
+    
+    if (!algorithm) {
+        alert('Please select an algorithm.');
+        return;
+    }
+    
+    // Check if Y column is in X columns
+    if (xColumns.includes(yColumn)) {
+        alert('The target column cannot also be a feature column. Please remove it from the X columns.');
+        return;
+    }
+    
+    // Show loading indicator
+    document.getElementById('loading-indicator').style.display = 'block';
+    
+    // Close modal
+    bootstrap.Modal.getInstance(document.getElementById('predictionModal')).hide();
+    
+    // Prepare form data
+    const formData = new FormData();
+    formData.append('y_column', yColumn);
+    formData.append('algorithm', algorithm);
+    xColumns.forEach(col => formData.append('x_columns', col));
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    // Send request to train model
+    fetch(`/train-model/${csvId}/`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loading-indicator').style.display = 'none';
+        
+        if (data.success) {
+            // Display model info
+            document.getElementById('model-info').innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i>Model Trained Successfully</h5>
+                    <p class="mb-1"><strong>Algorithm:</strong> ${data.algorithm_name}</p>
+                    <p class="mb-1"><strong>Target Variable:</strong> ${data.y_column}</p>
+                    <p class="mb-0"><strong>Features:</strong> ${data.x_columns.join(', ')}</p>
+                </div>
+            `;
+            
+            // Display model metrics
+            let metricsHtml = '';
+            
+            if (data.is_classifier) {
+                metricsHtml = `
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <h6>Accuracy</h6>
+                                <div class="h3">${(data.metrics.accuracy * 100).toFixed(2)}%</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <h6>F1 Score</h6>
+                                <div class="h3">${(data.metrics.f1_score * 100).toFixed(2)}%</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <h6>Precision</h6>
+                                <div class="h3">${(data.metrics.precision * 100).toFixed(2)}%</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <h6>Recall</h6>
+                                <div class="h3">${(data.metrics.recall * 100).toFixed(2)}%</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                metricsHtml = `
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <h6>R² Score</h6>
+                                <div class="h3">${(data.metrics.r2_score * 100).toFixed(2)}%</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <h6>Mean Absolute Error</h6>
+                                <div class="h3">${data.metrics.mae.toFixed(4)}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <h6>Mean Squared Error</h6>
+                                <div class="h3">${data.metrics.mse.toFixed(4)}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <h6>Root Mean Squared Error</h6>
+                                <div class="h3">${data.metrics.rmse.toFixed(4)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('model-metrics').innerHTML = metricsHtml;
+            
+            // Create input fields for prediction
+            const inputsContainer = document.getElementById('prediction-inputs');
+            inputsContainer.innerHTML = '';
+            
+            data.x_columns.forEach(col => {
+                const formGroup = document.createElement('div');
+                formGroup.className = 'mb-3';
+                
+                const label = document.createElement('label');
+                label.className = 'form-label';
+                label.textContent = col;
+                
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'form-control';
+                input.name = col;
+                input.required = true;
+                input.placeholder = `Enter value for ${col}`;
+                
+                formGroup.appendChild(label);
+                formGroup.appendChild(input);
+                inputsContainer.appendChild(formGroup);
+            });
+            
+            // Store model ID for prediction
+            document.getElementById('prediction-input-form').dataset.modelId = data.model_id;
+            
+            // Show prediction results container
+            document.getElementById('prediction-results-container').style.display = 'block';
+            document.getElementById('prediction-output').style.display = 'none';
+            
+            // Scroll to results
+            document.getElementById('prediction-results-container').scrollIntoView({ behavior: 'smooth' });
+        } else {
+            showAlert(data.error || 'Error training model. Please try again.', 'danger');
+        }
+    })
+    .catch(error => {
+        document.getElementById('loading-indicator').style.display = 'none';
+        showAlert('Network error: Unable to train model. Please try again.', 'danger');
+        console.error('Error:', error);
+    });
+});
+
+// Handle prediction form submission
+document.getElementById('prediction-input-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const modelId = this.dataset.modelId;
+    if (!modelId) {
+        alert('No model available. Please train a model first.');
+        return;
+    }
+    
+    // Collect input values
+    const inputs = {};
+    const inputElements = this.querySelectorAll('input[type="text"]');
+    inputElements.forEach(input => {
+        inputs[input.name] = input.value;
+    });
+    
+    // Show loading
+    document.getElementById('loading-indicator').style.display = 'block';
+    
+    // Send prediction request
+    fetch(`/predict/${modelId}/`, {
+        method: 'POST',
+        body: JSON.stringify(inputs),
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loading-indicator').style.display = 'none';
+        
+        if (data.success) {
+            // Display prediction
+            document.getElementById('prediction-value').textContent = data.prediction;
+            document.getElementById('prediction-output').style.display = 'block';
+        } else {
+            alert(data.error || 'Error making prediction. Please check your input values.');
+        }
+    })
+    .catch(error => {
+        document.getElementById('loading-indicator').style.display = 'none';
+        alert('Network error: Unable to make prediction. Please try again.');
+        console.error('Error:', error);
+    });
+});
+
+// Close prediction results
+function closePredictionResults() {
+    document.getElementById('prediction-results-container').style.display = 'none';
+}
+
+// Add some CSS for metrics
+document.head.insertAdjacentHTML('beforeend', `
+    <style>
+        .metric-card {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .metric-card h6 {
+            color: #6c757d;
+            margin-bottom: 8px;
+        }
+        .metric-card .h3 {
+            color: #0d6efd;
+            margin-bottom: 0;
+        }
+    </style>
+`);
+</script>
+{% endblock %}
