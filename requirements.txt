@@ -1,3 +1,7 @@
+pip>=25.1
+setuptools>=65
+wheel
+
 Django==4.2.7
 gunicorn==21.2.0
 dj-database-url==2.1.0
